@@ -4,18 +4,18 @@ Generate custom datasets instantly with AI or predefined templates. Perfect for 
 
 ## ✨ Features
 
-- *AI-Powered Generation*: Describe what you need, get the perfect dataset
-- *Ready-Made Templates*: Common data types pre-configured for instant use
-- *Multiple Export Formats*: Download as CSV or Excel
-- *Zero Setup*: Web-based, no installation required
-- *Fast & Intuitive*: Generate datasets in seconds
+- _AI-Powered Generation_: Describe what you need, get the perfect dataset
+- _Ready-Made Templates_: Common data types pre-configured for instant use
+- _Multiple Export Formats_: Download as CSV or Excel
+- _Zero Setup_: Web-based, no installation required
+- _Fast & Intuitive_: Generate datasets in seconds
 
 ## 🚀 How It Works
 
-1. *Choose your method*: Use AI prompts or select a template
-2. *Customize*: Adjust fields, data types, and row counts
-3. *Generate*: Create your dataset instantly
-4. *Download*: Export as CSV or Excel format
+1. _Choose your method_: Use AI prompts or select a template
+2. _Customize_: Adjust fields, data types, and row counts
+3. _Generate_: Create your dataset instantly
+4. _Download_: Export as CSV or Excel format
 
 ## 🎯 Perfect For
 
