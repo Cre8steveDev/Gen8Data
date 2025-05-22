@@ -24,7 +24,7 @@ export async function generateAiData(prompt: string, rowCount: number) {
         { role: "system", content: systemPrompt },
         { role: "user", content: enhancedPrompt },
       ],
-      temperature: 0.7,
+      temperature: 1,
     });
 
     const text = response.choices[0]?.message?.content || "[]";
