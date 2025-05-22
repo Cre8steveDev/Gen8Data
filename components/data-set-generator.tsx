@@ -44,13 +44,73 @@ export function DataSetGenerator() {
   const [selectedCategory, setSelectedCategory] = useState<string>(
     dataCategories[0].id
   );
-  const [rowCount, setRowCount] = useState<number>(100);
+  const [rowCount, setRowCount] = useState<number>(10);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [generatedData, setGeneratedData] = useState<any[] | null>(null);
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   const [aiPrompt, setAiPrompt] = useState<string>("");
   const [openAiAvailable, setOpenAiAvailable] = useState<boolean | null>(null);
   const [darkMode, setDarkMode] = useState<boolean>(false);
+
+  // --- AI rate limiting state ---
+  const [lastAiRequestTime, setLastAiRequestTime] = useState<number | null>(
+    null
+  );
+  const [aiRateLimitActive, setAiRateLimitActive] = useState<boolean>(false);
+  const AI_RATE_LIMIT_MINUTES = 10;
+  const AI_RATE_LIMIT_KEY = "gen8data-last-ai-request";
+
+  // Detect system preference on mount, and allow override via localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("gen8data-dark");
+      if (stored === "1") {
+        setDarkMode(true);
+      } else if (stored === "0") {
+        setDarkMode(false);
+      } else {
+        // No preference stored, use system preference
+        const prefersDark =
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches;
+        setDarkMode(prefersDark);
+      }
+
+      // Load AI rate limit from localStorage
+      const storedAi = localStorage.getItem(AI_RATE_LIMIT_KEY);
+      if (storedAi) {
+        const ts = parseInt(storedAi, 10);
+        setLastAiRequestTime(ts);
+        if (Date.now() - ts < AI_RATE_LIMIT_MINUTES * 60 * 1000) {
+          setAiRateLimitActive(true);
+        }
+      }
+    }
+  }, []);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      if (darkMode) {
+        document.documentElement.classList.add("dark");
+        localStorage.setItem("gen8data-dark", "1");
+      } else {
+        document.documentElement.classList.remove("dark");
+        localStorage.setItem("gen8data-dark", "0");
+      }
+    }
+  }, [darkMode]);
+
+  // AI rate limit timer
+  useEffect(() => {
+    if (!lastAiRequestTime) return;
+    const interval = setInterval(() => {
+      if (Date.now() - lastAiRequestTime >= AI_RATE_LIMIT_MINUTES * 60 * 1000) {
+        setAiRateLimitActive(false);
+      } else {
+        setAiRateLimitActive(true);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [lastAiRequestTime]);
 
   const router = useRouter();
 
@@ -89,26 +149,6 @@ export function DataSetGenerator() {
     }
   }, [selectedCategory, activeCategory]);
 
-  // Optionally persist mode in localStorage
-  useEffect(() => {
-    const stored =
-      typeof window !== "undefined"
-        ? localStorage.getItem("gen8data-dark")
-        : null;
-    if (stored === "1") setDarkMode(true);
-  }, []);
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      if (darkMode) {
-        document.documentElement.classList.add("dark");
-        localStorage.setItem("gen8data-dark", "1");
-      } else {
-        document.documentElement.classList.remove("dark");
-        localStorage.setItem("gen8data-dark", "0");
-      }
-    }
-  }, [darkMode]);
-
   const handleColumnToggle = (columnId: string) => {
     setSelectedColumns((prev) =>
       prev.includes(columnId)
@@ -118,6 +158,26 @@ export function DataSetGenerator() {
   };
 
   const handleGenerate = async () => {
+    // Only rate limit AI prompt requests
+    if (activeTab === "ai") {
+      const now = Date.now();
+      if (
+        lastAiRequestTime &&
+        now - lastAiRequestTime < AI_RATE_LIMIT_MINUTES * 60 * 1000
+      ) {
+        const wait = Math.ceil(
+          (AI_RATE_LIMIT_MINUTES * 60 * 1000 - (now - lastAiRequestTime)) /
+            60000
+        );
+        toast.error("Rate Limit Exceeded", {
+          description: `Please wait ${wait} more minute${
+            wait > 1 ? "s" : ""
+          } before generating another AI dataset.`,
+        });
+        return;
+      }
+    }
+
     try {
       setIsGenerating(true);
 
@@ -131,6 +191,14 @@ export function DataSetGenerator() {
 
       const data = await generateDataset(config);
       setGeneratedData(data);
+
+      // Set last AI request time if AI tab
+      if (activeTab === "ai") {
+        const ts = Date.now();
+        localStorage.setItem(AI_RATE_LIMIT_KEY, ts.toString());
+        setLastAiRequestTime(ts);
+        setAiRateLimitActive(true);
+      }
 
       toast.success("Dataset Generated.", {
         description: `Successfully generated ${data.length} rows of data.`,
@@ -199,7 +267,10 @@ export function DataSetGenerator() {
       className={`grid gap-6 max-w-full px-2 sm:px-4 md:px-8 lg:max-w-3xl mx-auto`}
     >
       {/* Light/Dark mode switch at the very top */}
-      <div className="flex justify-end pt-4">
+      <div
+        className="flex justify-end pt-4"
+        onClick={() => setDarkMode((v) => !v)}
+      >
         <div className="flex items-center gap-2 bg-muted px-3 py-1 rounded-full shadow-sm border border-border">
           <span className="text-xs font-medium select-none">
             {darkMode ? "Dark Mode" : "Light Mode"}
@@ -209,7 +280,6 @@ export function DataSetGenerator() {
               darkMode ? "Switch to light mode" : "Switch to dark mode"
             }
             className="rounded-full p-1 transition-colors hover:bg-accent"
-            onClick={() => setDarkMode((v) => !v)}
             type="button"
           >
             {darkMode ? (
@@ -360,6 +430,11 @@ export function DataSetGenerator() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              <div className="rounded-md bg-muted/60 p-3 text-xs text-muted-foreground border border-dashed border-border">
+                Please use the AI feature responsibly. To ensure fair usage, you
+                can only generate a new AI dataset every {AI_RATE_LIMIT_MINUTES}{" "}
+                minutes. Thank you for being considerate!
+              </div>
               {openAiAvailable === false && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
@@ -398,17 +473,17 @@ export function DataSetGenerator() {
                 </div>
                 <Slider
                   id="ai-row-count"
-                  min={10}
-                  max={500}
-                  step={10}
+                  min={5}
+                  max={50}
+                  step={1}
                   value={[rowCount]}
                   onValueChange={(values) => setRowCount(values[0])}
                   className="py-4"
                   disabled={openAiAvailable === false}
                 />
                 <div className="flex justify-between text-xs text-muted-foreground gen8data-mobile-text-base">
-                  <span>10</span>
-                  <span>500</span>
+                  <span>5</span>
+                  <span>50</span>
                 </div>
               </div>
             </CardContent>
@@ -417,7 +492,10 @@ export function DataSetGenerator() {
                 className="w-full sm:w-auto gen8data-mobile-text-base"
                 onClick={handleGenerate}
                 disabled={
-                  isGenerating || !aiPrompt.trim() || openAiAvailable === false
+                  isGenerating ||
+                  !aiPrompt.trim() ||
+                  openAiAvailable === false ||
+                  aiRateLimitActive
                 }
               >
                 {isGenerating ? (
@@ -425,6 +503,8 @@ export function DataSetGenerator() {
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Generating...
                   </>
+                ) : aiRateLimitActive ? (
+                  `Please wait...`
                 ) : (
                   "Generate Dataset"
                 )}
@@ -475,7 +555,7 @@ export function DataSetGenerator() {
           rel="noopener noreferrer"
           className="hover:text-primary no-underline"
         >
-          @cre8stevedev
+          @cre8stevedev + v0.dev
         </a>
       </footer>
     </div>
